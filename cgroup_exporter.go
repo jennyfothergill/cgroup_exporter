@@ -213,7 +213,8 @@ func getInfoV1(name string, metric *CgroupMetric, logger log.Logger) {
 }
 
 func getInfoV2(name string, metric *CgroupMetric, logger log.Logger) {
-	// possibilities are /system.slice/slurmstepd.scope/job_211
+	// possibilities are /system.slice/slurmstepd.scope/<HASHED VALUE>
+	//                   /system.slice/slurmstepd.scope/job_211
 	//                   /system.slice/slurmstepd.scope/job_211/step_interactive
 	//                   /system.slice/slurmstepd.scope/job_211/step_batch/user/task_0
 	//                   /system.slice/slurmstepd.scope/job_211/step_batch/user/task_special
@@ -234,6 +235,31 @@ func getInfoV2(name string, metric *CgroupMetric, logger log.Logger) {
 		metric.step = slurmMatch[5]
 		metric.task = slurmMatch[7]
 		level.Debug(logger).Log("msg", "Got for", "jobid", metric.jobid, "step", metric.step, "task", metric.task)
+	}
+	ishash, _ := regexp.MatchString("s[0-9A-Z]{13}",metric.jobid)
+	if ishash {
+		level.Debug(logger).Log("msg", "JobID is hash")
+		path := filepath.Join(*cgroupRoot, name, "/step_batch/slurm/cgroup.procs")
+		level.Debug(logger).Log("msg", "name", name)
+		level.Debug(logger).Log("msg", "*cgroupRoot", *cgroupRoot)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			panic(err)
+		}
+		jobpid := strings.TrimSpace(string(data))
+		level.Debug(logger).Log("msg", "jobpid", jobpid)
+		pidpath := filepath.Join("/proc/", jobpid, "/cmdline")
+		pidcmd, err := os.ReadFile(pidpath)
+                if err != nil {
+                        panic(err)
+                }
+		re := regexp.MustCompile("[0-9]+")
+		x := re.FindString(string(pidcmd))
+		slurmjobid, err := strconv.Atoi(x)
+		if err != nil {
+			panic(err)
+		}
+		level.Debug(logger).Log("msg", "Slurm job ID", slurmjobid)
 	}
 }
 
